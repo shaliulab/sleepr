@@ -137,7 +137,7 @@ max_velocity_detector  <- function(data,
   # all the data up to the first interaction in the whole experiment time course
   # is masked with the above protocol (under interaction_id 0)
   # so ignore the mask if interaction_id is 0 because there was no interaction
-  d$velocity <- ifelse(d$masked & $interaction_id != 0, 0, d$velocity)]
+  d$velocity <- ifelse(d$masked & d$interaction_id != 0, 0, d$velocity)]
 
   # in the same way, beam cross can only be TRUE if masked is FALSE
   d$beam_cross <- !d$masked & d$beam_cross

@@ -30,7 +30,9 @@
 #' @seealso
 #' * [sleep_annotation] -- which requieres a motion detector
 #' @export
-max_velocity_detector  <- function(data,
+#' @importFrom dplyr right_join summarise
+#' @importFrom magrittr `%>%`
+  max_velocity_detector  <- function(data,
                                    time_window_length,
                                    velocity_correction_coef = 3e-3,
                                    masking_duration = 6,
@@ -41,6 +43,7 @@ max_velocity_detector  <- function(data,
   xy_dist_log10x1000 = max_velocity = velocity_corrected = NULL
 
   message(sprintf("Velocity correction coefficient: %#.4f", velocity_correction_coef))
+
 
   ## Preprocessing
   ## ----
@@ -63,21 +66,6 @@ max_velocity_detector  <- function(data,
   ## ----
   # compute the inter frame time
   d$dt <-  c(NA,diff(d$t))
-
-  ##################
-
-  d_small <- dplyr::right_join(d, max_velocity[, c("t_round","max_velocity")])
-
-  #d_small <- d[,.(
-  #  max_velocity = max(velocity)
-  #), by="t_round"]
-
-  d_small$moving <- ifelse(d_small$max_velocity > velocity_threshold, TRUE,FALSE)
-  d_small<-data.table::as.data.table(d_small)
-  data.table::setnames(d_small, "t_round", "t")
-  d_small
-  #########################
-
 
   #d[,surface_change := xor_dist * 1e-3]
 
@@ -128,9 +116,11 @@ max_velocity_detector  <- function(data,
   #   by=interaction_id
   #   ]
 
-  t0 <- group_by(d, interaction_id) %>% summarise(t0 = min(t))
+  t0 <- dplyr::group_by(d, interaction_id) %>% dplyr::summarise(t0 = min(t))
   d <- right_join(d, t0[, c("t0", "interaction_id")])
-  d$masked <- ifelse(t < d$t0 + masking_duration, TRUE, FALSE)
+  # browser()
+
+  d$masked <- ifelse(d$t < (d$t0 + masking_duration), TRUE, FALSE)
   d$t0 <- NULL
 
   # velocity is 0 if the mask is TRUE
@@ -171,7 +161,7 @@ max_velocity_detector  <- function(data,
     )
 
   d_small <- dplyr::right_join(d, stats[, c("max_velocity", "interactions", "beam_crosses", "t_round")])
-  
+
   # Gist of the program!!
   # Score movement as TRUE/FALSE value for every window
   # Score is TRUE if max_velocity of the window is > 1
@@ -183,6 +173,7 @@ max_velocity_detector  <- function(data,
   # of the first frame in the window
   d_small <- data.table::as.data.table(d_small)
   data.table::setnames(d_small, "t_round", "t")
+  setkey(d_small, t)
   return(d_small)
 }
 
@@ -253,7 +244,7 @@ prepare_data_for_motion_detector <- function(data,
   # the windows do not overlap
   # for t in [300, 309.999] t_round = 300
   # for t 310, it is 310 i.e. data form 310 and thereafter is analyzed as another window
-  d$t_round <-  d$time_window_length * floor(d$t / d$time_window_length)
+  d$t_round <-  time_window_length * floor(d$t / time_window_length)
 
   # remove datapoints belonging to windows (of size 60 seconds by default)
   # where the number of datapoints is less than a default of 20.

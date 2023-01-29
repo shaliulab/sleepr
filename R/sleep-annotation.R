@@ -72,10 +72,8 @@ sleep_annotation <- function(data,
       return(NULL)
     }
     # todo if t not unique, stop
-    browser()
 
-
-    d_small <- motion_detector_FUN(d, time_window_length,...)
+    d_small <- motion_detector_FUN(d, time_window_length, ...)
 
     if(key(d_small) != "t")
       stop("Key in output of motion_classifier_FUN MUST be `t'")
@@ -103,10 +101,8 @@ sleep_annotation <- function(data,
   if(is.null(key(data)))
     return(wrapped(data))
 
-  data_ <- do.call(rbind, lapply(unique(data[, key(data)]), function(k) {wrapped(data[key(data) == k, ])}))
-  setkeyv(data_, key(data))
-  data <- data_
-  rm(data_)
+  data <- do.call(rbind, lapply(unique(data[, key(data)]), function(k) {wrapped(data[key(data) == k, ])}))
+  data
 }
 
 attr(sleep_annotation, "needed_columns") <- function(motion_detector_FUN = max_velocity_detector,

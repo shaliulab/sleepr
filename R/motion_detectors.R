@@ -64,6 +64,8 @@ max_velocity_detector  <- function(data,
   # compute the inter frame time
   d$dt <-  c(NA,diff(d$t))
 
+  ##################
+
   d_small <- dplyr::right_join(d, max_velocity[, c("t_round","max_velocity")])
 
   #d_small <- d[,.(
@@ -74,6 +76,9 @@ max_velocity_detector  <- function(data,
   d_small<-data.table::as.data.table(d_small)
   data.table::setnames(d_small, "t_round", "t")
   d_small
+  #########################
+
+
   #d[,surface_change := xor_dist * 1e-3]
 
   # restore the distance from the log-transformed variable
@@ -92,10 +97,7 @@ max_velocity_detector  <- function(data,
   # and 1/-1 when it does
   # we dont care about the direction i.e. whether it is 1 or -1
   # so take the absolute value and take that as a beam cross
-  d$beam_cross <- abs(c(0,diff(sign(.5 -d$x))))
-
-  # encode the 1/0 as True/False i.e. a properly boolean variable
-  d[,beam_cross := as.logical(beam_cross)]
+  d$beam_cross <- as.logical(abs(c(0,diff(sign(.5 -d$x)))))
   ## ----
 
 
@@ -108,37 +110,42 @@ max_velocity_detector  <- function(data,
       warning("Data does not contain an `has_interacted` column.
               Cannot apply masking!.
               Set `masking_duration = 0` to ignore masking")
-    d[, has_interacted := 0]
+    d$has_interacted <- 0
   }
 
   # create a unique identifier for every interaction
   # this is done so we can split d
   # so rows within the same block share last interaction
-  d[,interaction_id := cumsum(has_interacted)]
+  d$interaction_id <- cumsum(d$has_interacted)
 
   # masked becomes TRUE if t is within masking_duration
   # after t[1]
   # since the first row of the block
   # represents the last interaction
   # the time of the interaction is t[1]
-  d[,
-    masked := t < (t[1] + masking_duration),
-    by=interaction_id
-    ]
+  # d[,
+  #   masked := t < (t[1] + masking_duration),
+  #   by=interaction_id
+  #   ]
+
+  t0 <- group_by(d, interaction_id) %>% summarise(t0 = min(t))
+  d <- right_join(d, t0[, c("t0", "interaction_id")])
+  d$masked <- ifelse(t < d$t0 + masking_duration, TRUE, FALSE)
+  d$t0 <- NULL
 
   # velocity is 0 if the mask is TRUE
   # all the data up to the first interaction in the whole experiment time course
   # is masked with the above protocol (under interaction_id 0)
   # so ignore the mask if interaction_id is 0 because there was no interaction
-  d[ ,velocity := ifelse(masked & interaction_id != 0, 0, velocity)]
+  d$velocity <- ifelse(d$masked & $interaction_id != 0, 0, d$velocity)]
 
   # in the same way, beam cross can only be TRUE if masked is FALSE
-  d[,beam_cross := !masked & beam_cross]
+  d$beam_cross <- !d$masked & d$beam_cross
 
   # remove the interaction_id and masked columns
   # to preserve state
-  d[,interaction_id := NULL]
-  d[,masked := NULL]
+  d$interaction_id <- NULL
+  d$masked <- NULL
   ## ----
 
   # velocity correction to handle
@@ -146,10 +153,9 @@ max_velocity_detector  <- function(data,
   # See quentin's Thesis
   # PDF -> https://spiral.imperial.ac.uk:8443/handle/10044/1/69514
   # First paragraph in https://github.com/rethomics/sleepr/issues/7#issuecomment-579297206
-  d[, velocity_corrected :=  velocity  * dt  /a]
+  d$velocity_corrected <-  d$velocity  * d$dt  / a
 
 
-  max_velocity <- dplyr::group_by(d, t_round) %>% summarise(max_velocity = max(velocity))
 
   # Get a central summary value for variables of interest
   # for each window given by t_round
@@ -158,24 +164,25 @@ max_velocity_detector  <- function(data,
   # velocity_corrected -> max
   # has_interacted -> sum
   # beam_cross -> sum
-  d_small <- d[,.(
-    max_velocity = max(velocity_corrected[2:.N]),
-    # dist = sum(dist[2:.N]),
-    interactions = as.integer(sum(has_interacted)),
-    beam_crosses = as.integer(sum(beam_cross))
-  ), by = "t_round"]
+  stats <- dplyr::group_by(d, t_round) %>% summarise(
+      max_velocity = max(velocity[2:, length(velocity)]),
+      interactions = as.integer(sum(has_interacted)),
+      beam_crosses = as.integer(sum(beam_cross))
+    )
 
+  d_small <- dplyr::right_join(d, stats[, c("max_velocity", "interactions", "beam_crosses", "t_round")])
+  
   # Gist of the program!!
   # Score movement as TRUE/FALSE value for every window
   # Score is TRUE if max_velocity of the window is > 1
   # Score FALSE otherwise
-  d_small[, moving :=  ifelse(max_velocity > 1, TRUE,FALSE)]
+  d_small$moving <-  ifelse(d_small$max_velocity > 1, TRUE,FALSE)
 
   # Set t_round as the representative time of the window
   # i.e. t becomes the begining of the window and not the t
   # of the first frame in the window
+  d_small <- data.table::as.data.table(d_small)
   data.table::setnames(d_small, "t_round", "t")
-
   return(d_small)
 }
 

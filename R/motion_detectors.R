@@ -165,7 +165,7 @@ max_velocity_detector  <- function(data,
   # has_interacted -> sum
   # beam_cross -> sum
   stats <- dplyr::group_by(d, t_round) %>% summarise(
-      max_velocity = max(velocity[2:, length(velocity)),
+      max_velocity = max(velocity[2:length(velocity])),
       interactions = as.integer(sum(has_interacted)),
       beam_crosses = as.integer(sum(beam_cross))
     )

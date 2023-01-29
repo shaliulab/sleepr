@@ -62,14 +62,23 @@ max_velocity_detector  <- function(data,
   ## or something with a direct physical interpretation
   ## ----
   # compute the inter frame time
-  d[,dt := c(NA, diff(t))]
+  d$dt <-  c(NA,diff(d$t))
+
+  d_small <- dplyr::right_join(d, max_velocity[, c("t_round","max_velocity")])
+
+  #d_small <- d[,.(
+  #  max_velocity = max(velocity)
+  #), by="t_round"]
+
+  d_small$moving <- ifelse(d_small$max_velocity > velocity_threshold, TRUE,FALSE)
+  d_small<-data.table::as.data.table(d_small)
+  data.table::setnames(d_small, "t_round", "t")
+  d_small
   #d[,surface_change := xor_dist * 1e-3]
 
   # restore the distance from the log-transformed variable
   d[,dist := 10^(xy_dist_log10x1000/1000) ]
-
-  # compute the velocity by dividing distance with time differences
-  d[,velocity := dist/dt]
+  d$velocity <- 10^(d$xy_dist_log10x1000/1000)/d$dt
 
   a = velocity_correction_coef
   ## ----
@@ -83,7 +92,7 @@ max_velocity_detector  <- function(data,
   # and 1/-1 when it does
   # we dont care about the direction i.e. whether it is 1 or -1
   # so take the absolute value and take that as a beam cross
-  d[,beam_cross := abs(c(0,diff(sign(.5 - x))))]
+  d$beam_cross <- abs(c(0,diff(sign(.5 -d$x))))
 
   # encode the 1/0 as True/False i.e. a properly boolean variable
   d[,beam_cross := as.logical(beam_cross)]
@@ -139,6 +148,9 @@ max_velocity_detector  <- function(data,
   # First paragraph in https://github.com/rethomics/sleepr/issues/7#issuecomment-579297206
   d[, velocity_corrected :=  velocity  * dt  /a]
 
+
+  max_velocity <- dplyr::group_by(d, t_round) %>% summarise(max_velocity = max(velocity))
+
   # Get a central summary value for variables of interest
   # for each window given by t_round
   # See prepare_data_for_motion_detector to learn
@@ -167,39 +179,11 @@ max_velocity_detector  <- function(data,
   return(d_small)
 }
 
+
 attr(max_velocity_detector, "needed_columns") <- function(...){
   c("xy_dist_log10x1000", "x", "has_interacted")
 }
 
-#' @export
-#' @rdname motion_detectors
-max_velocity_detector_legacy <- function(data, velocity_threshold=.006){
-
-  dt = x = .N = . = velocity = moving = dist = beam_cross = has_interacted = NULL
-  dt = beam_crossed =  interaction_id = masked = interactions =  NULL
-  xy_dist_log10x1000 = max_velocity = NULL
-  time_window_length = NULL
-
-  d <- prepare_data_for_motion_detector(data,
-                                        c("t", "xy_dist_log10x1000"),
-                                        time_window_length)
-  dt = velocity = NULL
-
-  d[,dt := c(NA,diff(t))]
-  d[,velocity := 10^(xy_dist_log10x1000/1000)/dt ]
-  #d[,max_velocity := 10^(xy_dist_log10x1000/1000)/dt ]
-  d_small <- d[,.(
-    max_velocity = max(velocity)
-  ), by="t_round"]
-
-  d_small[, moving :=  ifelse(max_velocity > velocity_threshold, TRUE,FALSE)]
-  data.table::setnames(d_small, "t_round", "t")
-  d_small
-}
-
-attr(max_velocity_detector_legacy, "needed_columns") <- function(...){
-  c("xy_dist_log10x1000")
-}
 
 
 
@@ -262,7 +246,7 @@ prepare_data_for_motion_detector <- function(data,
   # the windows do not overlap
   # for t in [300, 309.999] t_round = 300
   # for t 310, it is 310 i.e. data form 310 and thereafter is analyzed as another window
-  d[, t_round := time_window_length * floor(t /time_window_length)]
+  d$t_round <-  d$time_window_length * floor(d$t / d$time_window_length)
 
   # remove datapoints belonging to windows (of size 60 seconds by default)
   # where the number of datapoints is less than a default of 20.

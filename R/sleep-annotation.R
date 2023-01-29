@@ -66,13 +66,13 @@ sleep_annotation <- function(data,
 
   message(sprintf("Time window length: %s", time_window_length))
   message(sprintf("Min time immobile: %s", min_time_immobile))
-
   wrapped <- function(d){
     if(nrow(d) < 100) {
       warning("Dataset is very small")
       return(NULL)
     }
     # todo if t not unique, stop
+    browser()
 
 
     d_small <- motion_detector_FUN(d, time_window_length,...)
@@ -102,9 +102,11 @@ sleep_annotation <- function(data,
 
   if(is.null(key(data)))
     return(wrapped(data))
-  data[,
-       wrapped(.SD),
-       by=key(data)]
+
+  data_ <- do.call(rbind, lapply(unique(data[, key(data)]), function(k) {wrapped(data[key(data) == k, ])}))
+  setkeyv(data_, key(data))
+  data <- data_
+  rm(data_)
 }
 
 attr(sleep_annotation, "needed_columns") <- function(motion_detector_FUN = max_velocity_detector,

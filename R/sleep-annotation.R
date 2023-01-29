@@ -52,6 +52,7 @@
 #' * [bout_analysis] -- to further analyse sleep bouts in terms of onset and length
 #' @references
 #' * The relevant [rethomic tutorial section](https://rethomics.github.io/sleepr) -- on sleep analysis
+#' @importFrom dplyr outer_join join_by preceding
 #' @export
 sleep_annotation <- function(data,
                              time_window_length = 10, #s
@@ -83,19 +84,28 @@ sleep_annotation <- function(data,
     # the times to  be queried
     time_map <- data.table::data.table(t = seq(from=d_small[1,t], to=d_small[.N,t], by=time_window_length),
                                        key = "t")
-    missing_val <- time_map[!d_small]
+    
+    
+    missing_val <- time_map[! (time_map[, key(time_map)] %in% d_small[, key(d_small)]), ]
 
-    d_small <- d_small[time_map,roll=T]
-    d_small[,is_interpolated := FALSE]
-    d_small[missing_val,is_interpolated:=TRUE]
-    d_small[is_interpolated == T, moving := FALSE]
-    d_small[,asleep := sleep_contiguous(moving,
+    d_small <- dplyr::outer_join(d_small, time_map, dplyr::join_by(dplyr::preceding(key(d_small))))
+
+
+    missing_val$is_interpolated <- TRUE
+    d_small <- dplyr::outer_join(d_small, missing_val)
+
+
+    d_small[d_small$is_interpolated == T, "moving"] <- FALSE
+
+    d_small$asleep <- sleep_contiguous(d_small$moving,
                                         1/time_window_length,
-                                        min_valid_time = min_time_immobile)]
-    d_small <- stats::na.omit(d[d_small,
-                                on=c("t"),
-                                roll=T])
-    d_small[, intersect(columns_to_keep, colnames(d_small)), with=FALSE]
+                                        min_valid_time = min_time_immobile)
+
+    d_small <- dplyr::outer_join(d, d_small, dplyr::join_by(preceding(t)))
+    d_small <- stats::na.omit(d_small)
+    d_small <- d_small[, intersect(columns_to_keep, colnames(d_small)), with=FALSE]
+    
+    return(d_small)
   }
 
   if(is.null(key(data)))

@@ -71,6 +71,7 @@
 
   # restore the distance from the log-transformed variable
   d[,dist := 10^(xy_dist_log10x1000/1000) ]
+
   d$velocity <- 10^(d$xy_dist_log10x1000/1000)/d$dt
 
   a = velocity_correction_coef
@@ -118,7 +119,6 @@
 
   t0 <- dplyr::group_by(d, interaction_id) %>% dplyr::summarise(t0 = min(t))
   d <- right_join(d, t0[, c("t0", "interaction_id")])
-  # browser()
 
   d$masked <- ifelse(d$t < (d$t0 + masking_duration), TRUE, FALSE)
   d$t0 <- NULL
@@ -155,7 +155,7 @@
   # has_interacted -> sum
   # beam_cross -> sum
   stats <- dplyr::group_by(d, t_round) %>% summarise(
-      max_velocity = max(velocity[2:length(velocity)]),
+      max_velocity = max(velocity_corrected[2:length(velocity_corrected)]),
       interactions = as.integer(sum(has_interacted)),
       beam_crosses = as.integer(sum(beam_cross))
     )
@@ -172,6 +172,7 @@
   # i.e. t becomes the begining of the window and not the t
   # of the first frame in the window
   d_small <- data.table::as.data.table(d_small)
+  d_small$t <- NULL
   data.table::setnames(d_small, "t_round", "t")
   setkey(d_small, t)
   return(d_small)

@@ -3,7 +3,6 @@
 \name{motion_detectors}
 \alias{motion_detectors}
 \alias{max_velocity_detector}
-\alias{max_velocity_detector_legacy}
 \alias{virtual_beam_cross_detector}
 \title{Motion detector for Ethocope data}
 \usage{
@@ -14,8 +13,6 @@ max_velocity_detector(
   masking_duration = 6,
   curate = TRUE
 )
-
-max_velocity_detector_legacy(data, velocity_threshold = 0.006)
 
 virtual_beam_cross_detector(data, time_window_length)
 }

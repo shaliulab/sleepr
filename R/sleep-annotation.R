@@ -52,7 +52,7 @@
 #' * [bout_analysis] -- to further analyse sleep bouts in terms of onset and length
 #' @references
 #' * The relevant [rethomic tutorial section](https://rethomics.github.io/sleepr) -- on sleep analysis
-#' @importFrom dplyr outer_join join_by preceding
+#' @importFrom dplyr full_join join_by preceding
 #' @export
 sleep_annotation <- function(data,
                              time_window_length = 10, #s
@@ -84,15 +84,18 @@ sleep_annotation <- function(data,
     # the times to  be queried
     time_map <- data.table::data.table(t = seq(from=d_small[1,t], to=d_small[.N,t], by=time_window_length),
                                        key = "t")
-    
-    
+
+
     missing_val <- time_map[! (time_map[, key(time_map)] %in% d_small[, key(d_small)]), ]
-
-    d_small <- dplyr::outer_join(d_small, time_map, dplyr::join_by(dplyr::preceding(key(d_small))))
-
+    cols<- key(d_small)
+    d_small <- dplyr::full_join(d_small, time_map, by=cols)
+    for (colu in c("dt", "dist", "velocity", "velocity_corrected", "max_velocity", "moving")) {
+      print(colu)
+      d_small[[colu]] <- zoo::na.locf(d_small[[colu]], na.rm=F)
+    }
 
     missing_val$is_interpolated <- TRUE
-    d_small <- dplyr::outer_join(d_small, missing_val)
+    d_small <- dplyr::full_join(d_small, missing_val)
 
 
     d_small[d_small$is_interpolated == T, "moving"] <- FALSE
@@ -101,17 +104,38 @@ sleep_annotation <- function(data,
                                         1/time_window_length,
                                         min_valid_time = min_time_immobile)
 
-    d_small <- dplyr::outer_join(d, d_small, dplyr::join_by(preceding(t)))
+    d$t_round <- floor(d$t / time_window_length) * time_window_length
+    d_small$t_round <- d_small$t
+
+
+    d_small <- dplyr::right_join(d, d_small[, c("t_round", "asleep", "moving", "max_velocity"), with=F], by="t_round")
+    d_small$t <- d_small$t_round
+    d_small$t_round <- NULL
+
     d_small <- stats::na.omit(d_small)
     d_small <- d_small[, intersect(columns_to_keep, colnames(d_small)), with=FALSE]
-    
+
     return(d_small)
   }
 
   if(is.null(key(data)))
     return(wrapped(data))
 
-  data <- do.call(rbind, lapply(unique(data[, key(data)]), function(k) {wrapped(data[key(data) == k, ])}))
+  metadata <- data[, meta=T]
+  data <- do.call(rbind, lapply(unique(data[, key(data), wit=F]), function(k) {
+    dt_roi <- data[as.vector(data[, key(data), with=F] == as.character(k)), ]
+    print(nrow(dt_roi))
+    x<- wrapped(dt_roi)
+
+    print(k)
+    x[[key(data)]] <- k
+    x
+    }))
+
+
+  data.table::setkey(data, id)
+  behavr::setmeta(data, metadata)
+
   data
 }
 
